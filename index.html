@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Andreas Maler — Dungeon World Character Sheet</title>
+  <title>Andreas Maler — Dungeon World</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -21,7 +21,7 @@
   <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
 
-// LocalStorage compatibility layer (replaces window.storage for standalone use)
+// LocalStorage compatibility layer
 const storageShim = {
   get: async (key, shared) => {
     try {
@@ -46,7 +46,6 @@ const storageShim = {
     } catch(e) { return null; }
   }
 };
-// Override window.storage for compatibility
 if (!window.storage) window.storage = storageShim;
 
 
@@ -401,10 +400,7 @@ function App(){
   const[ss,setSS]=useState("");
   const[showQA,setShowQA]=useState(false);
   const[showSync,setShowSync]=useState(false);
-  const[syncCode,setSyncCode]=useState("");
-  const[pullCode,setPullCode]=useState("");
   const[syncStatus,setSyncStatus]=useState("");
-  const[showRawExport,setShowRawExport]=useState(false);
   const[importText,setImportText]=useState("");
   const[storageOk,setStorageOk]=useState(null);
 
@@ -425,44 +421,17 @@ function App(){
     catch(e){setSS("save-fail");setStorageOk(false)}
   };
 
-  const genCode=()=>{const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";for(let i=0;i<6;i++)code+=chars[Math.floor(Math.random()*chars.length)];return code};
-
-  const pushSync=async()=>{
-    setSyncStatus("pushing");
-    const code=genCode();
-    const data=JSON.stringify({character:c,log:log,ts:Date.now()});
-    try{
-      await window.storage.set("dw-sync:"+code,data,true);
-      setSyncCode(code);setSyncStatus("pushed");
-    }catch(e){setSyncStatus("push-fail");console.error("Push sync error:",e)}
-  };
-
-  const pullSync=async()=>{
-    if(!pullCode.trim()||pullCode.trim().length!==6){setSyncStatus("bad-code");return}
-    setSyncStatus("pulling");
-    try{
-      const r=await window.storage.get("dw-sync:"+pullCode.trim().toUpperCase(),true);
-      if(r?.value){
-        const data=JSON.parse(r.value);
-        if(data.character){
-          setC({...DEFAULT_CHAR,...data.character,stats:{...DEFAULT_CHAR.stats,...(data.character.stats||{})},debilities:{...DEFAULT_CHAR.debilities,...(data.character.debilities||{})}});
-          if(data.log)setLog(data.log);
-          setSyncStatus("pulled");setSS("imported");setTimeout(()=>setSS(""),2000);
-        }else{setSyncStatus("bad-data")}
-      }else{setSyncStatus("not-found")}
-    }catch(e){setSyncStatus("pull-fail");console.error("Pull sync error:",e)}
-  };
-
-  const exportRaw=()=>{
+  const exportChar=()=>{
     const data=JSON.stringify({character:c,log:log},null,2);
-    setImportText(data);setShowRawExport(true);
-    if(navigator.clipboard)navigator.clipboard.writeText(data).catch(()=>{});
+    setImportText(data);
+    if(navigator.clipboard){navigator.clipboard.writeText(data).then(()=>{setSyncStatus("copied");setTimeout(()=>setSyncStatus(""),3000)}).catch(()=>{setSyncStatus("select")})}
+    else{setSyncStatus("select")}
   };
 
-  const importRaw=()=>{
+  const importChar=()=>{
     try{
       const data=JSON.parse(importText);
-      if(data.character){setC({...DEFAULT_CHAR,...data.character,stats:{...DEFAULT_CHAR.stats,...(data.character.stats||{})},debilities:{...DEFAULT_CHAR.debilities,...(data.character.debilities||{})}});if(data.log)setLog(data.log);setSS("imported");setShowSync(false);setImportText("");setShowRawExport(false);setTimeout(()=>setSS(""),2000)}
+      if(data.character){setC({...DEFAULT_CHAR,...data.character,stats:{...DEFAULT_CHAR.stats,...(data.character.stats||{})},debilities:{...DEFAULT_CHAR.debilities,...(data.character.debilities||{})}});if(data.log)setLog(data.log);setSS("imported");setShowSync(false);setImportText("");setTimeout(()=>setSS(""),2000)}
       else{setSyncStatus("bad-data")}
     }catch(e){setSyncStatus("bad-data")}
   };
@@ -546,59 +515,40 @@ function App(){
           {ss==="imported"&&<span style={{fontSize:10,color:"#c084fc",fontFamily:HD}}>{"\u2713"} Loaded</span>}
           {ss==="save-fail"&&<span style={{fontSize:10,color:"#f87171",fontFamily:HD}}>{"\u2717"} Failed</span>}
           <button onClick={manualSave} style={BT}>Save</button>
-          <button onClick={()=>{setShowSync(!showSync);setSyncStatus("");setSyncCode("");setPullCode("")}} style={{...BT,color:"#6aade8",borderColor:"#2a4a6a"}}>Sync</button>
+          <button onClick={()=>{setShowSync(!showSync);setSyncStatus("");setImportText("")}} style={{...BT,color:"#6aade8",borderColor:"#2a4a6a"}}>Transfer</button>
           <button onClick={resetChar} style={BX}>Reset</button>
         </div>
       </div>
 
       {storageOk===false&&<div style={{background:"#3a1510",borderBottom:"1px solid #5a2020",padding:"8px 16px",fontSize:12,color:"#f87171"}}>
-        Local storage unavailable. Use Sync to transfer your character between devices.
+        Local storage unavailable. Use Transfer to move your character between devices.
       </div>}
 
       {showSync&&<div style={{background:"#120e08",border:"1px solid #2a4a6a",margin:"10px 10px 0",borderRadius:10,padding:16,maxWidth:720,marginLeft:"auto",marginRight:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <span style={{fontFamily:HD,fontSize:14,color:"#6aade8",letterSpacing:2}}>SYNC ACROSS DEVICES</span>
-          <button onClick={()=>{setShowSync(false);setShowRawExport(false);setImportText("")}} style={{...BX,fontSize:10,padding:"2px 8px"}}>{"\u2715"}</button>
+          <span style={{fontFamily:HD,fontSize:14,color:"#6aade8",letterSpacing:2}}>TRANSFER CHARACTER</span>
+          <button onClick={()=>{setShowSync(false);setImportText("")}} style={{...BX,fontSize:10,padding:"2px 8px"}}>{"\u2715"}</button>
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
           <div style={{background:"#1a1510",border:"1px solid #2a2015",borderRadius:8,padding:14}}>
-            <div style={{fontFamily:HD,fontSize:12,color:"#c8a040",letterSpacing:1,marginBottom:8}}>PUSH (THIS DEVICE {"\u2192"} CODE)</div>
-            <div style={{fontSize:12,color:"#a89070",marginBottom:10,lineHeight:1.4}}>Generate a 6-character sync code. Enter it on your other device to load this character.</div>
-            <button onClick={pushSync} disabled={syncStatus==="pushing"} style={{...BG,width:"100%",padding:"8px 12px",fontSize:13}}>{syncStatus==="pushing"?"Generating...":"Generate Sync Code"}</button>
-            {syncCode&&syncStatus==="pushed"&&<div style={{marginTop:12,textAlign:"center"}}>
-              <div style={{fontSize:11,color:"#6a5a40",marginBottom:4}}>Your sync code:</div>
-              <div style={{fontSize:32,fontWeight:800,fontFamily:HD,color:"#4ade80",letterSpacing:8,background:"#0d0a06",borderRadius:8,padding:"10px 16px",border:"2px solid #2a5a2a"}}>{syncCode}</div>
-              <div style={{fontSize:11,color:"#6a5a40",marginTop:6}}>Code is temporary. Use it soon.</div>
-            </div>}
-            {syncStatus==="push-fail"&&<div style={{marginTop:8,fontSize:12,color:"#f87171"}}>Failed to generate sync code. Try the manual export below.</div>}
+            <div style={{fontFamily:HD,fontSize:12,color:"#c8a040",letterSpacing:1,marginBottom:8}}>EXPORT</div>
+            <div style={{fontSize:12,color:"#a89070",marginBottom:10,lineHeight:1.4}}>Copy your character data to clipboard. Paste it on another device to transfer, or save it as a backup.</div>
+            <button onClick={exportChar} style={{...BG,width:"100%",padding:"8px 12px",fontSize:13}}>Copy to Clipboard</button>
+            {syncStatus==="copied"&&<div style={{marginTop:8,fontSize:12,color:"#4ade80",textAlign:"center"}}>{"\u2713"} Copied! Paste on your other device.</div>}
+            {syncStatus==="select"&&<div style={{marginTop:8,fontSize:12,color:"#f0a050",textAlign:"center"}}>Select all the text below and copy manually.</div>}
           </div>
 
           <div style={{background:"#1a1510",border:"1px solid #2a2015",borderRadius:8,padding:14}}>
-            <div style={{fontFamily:HD,fontSize:12,color:"#c084fc",letterSpacing:1,marginBottom:8}}>PULL (CODE {"\u2192"} THIS DEVICE)</div>
-            <div style={{fontSize:12,color:"#a89070",marginBottom:10,lineHeight:1.4}}>Enter the sync code from your other device to load that character here.</div>
-            <div style={{display:"flex",gap:6}}>
-              <input value={pullCode} onChange={e=>setPullCode(e.target.value.toUpperCase().slice(0,6))} placeholder="ABC123" maxLength={6} style={{...IP,flex:1,fontSize:18,fontFamily:HD,textAlign:"center",letterSpacing:4,textTransform:"uppercase"}}/>
-              <button onClick={pullSync} disabled={pullCode.length!==6||syncStatus==="pulling"} style={{...BT,color:"#c084fc",borderColor:"#4a2a6a",padding:"8px 14px",opacity:pullCode.length===6?1:0.4}}>{syncStatus==="pulling"?"...":"Pull"}</button>
-            </div>
-            {syncStatus==="pulled"&&<div style={{marginTop:8,fontSize:12,color:"#4ade80"}}>{"\u2713"} Character loaded successfully!</div>}
-            {syncStatus==="not-found"&&<div style={{marginTop:8,fontSize:12,color:"#f87171"}}>Code not found. Check the code and try again.</div>}
-            {syncStatus==="bad-code"&&<div style={{marginTop:8,fontSize:12,color:"#f87171"}}>Enter a valid 6-character code.</div>}
-            {syncStatus==="bad-data"&&<div style={{marginTop:8,fontSize:12,color:"#f87171"}}>Invalid sync data.</div>}
-            {syncStatus==="pull-fail"&&<div style={{marginTop:8,fontSize:12,color:"#f87171"}}>Failed to connect. Try the manual import below.</div>}
+            <div style={{fontFamily:HD,fontSize:12,color:"#c084fc",letterSpacing:1,marginBottom:8}}>IMPORT</div>
+            <div style={{fontSize:12,color:"#a89070",marginBottom:10,lineHeight:1.4}}>Paste character data from another device or a backup to load it here. This will overwrite your current character.</div>
+            <button onClick={()=>{if(navigator.clipboard){navigator.clipboard.readText().then(t=>{setImportText(t)}).catch(()=>{})}}} style={{...BT,width:"100%",padding:"8px 12px",fontSize:13,color:"#c084fc",borderColor:"#4a2a6a",marginBottom:6}}>Paste from Clipboard</button>
+            <button onClick={importChar} disabled={!importText.trim()} style={{...BG,width:"100%",padding:"8px 12px",fontSize:13,opacity:importText.trim()?1:0.4}}>Load Character</button>
+            {syncStatus==="bad-data"&&<div style={{marginTop:8,fontSize:12,color:"#f87171"}}>Invalid data. Make sure you copied the full export.</div>}
           </div>
         </div>
 
-        <div style={{borderTop:"1px solid #2a2015",paddingTop:10}}>
-          <button onClick={()=>{if(showRawExport){setShowRawExport(false);setImportText("")}else{exportRaw()}}} style={{...BT,fontSize:10,color:"#7a6a50"}}>{showRawExport?"Hide":"Show"} Manual JSON Export/Import</button>
-          {showRawExport&&<div style={{marginTop:10}}>
-            <textarea value={importText} onChange={e=>setImportText(e.target.value)} rows={4} style={{...IP,width:"100%",resize:"vertical",fontSize:10,fontFamily:"monospace"}} placeholder="Paste exported JSON here to import..."/>
-            <div style={{display:"flex",gap:6,marginTop:6}}>
-              <button onClick={exportRaw} style={BG}>Copy Character JSON</button>
-              <button onClick={importRaw} disabled={!importText.trim()} style={{...BT,opacity:importText.trim()?1:0.4}}>Import JSON</button>
-            </div>
-          </div>}
-        </div>
+        <textarea value={importText} onChange={e=>setImportText(e.target.value)} rows={3} style={{...IP,width:"100%",resize:"vertical",fontSize:10,fontFamily:"monospace"}} placeholder="Character data appears here when you export, or paste data here to import..."/>
       </div>}
 
       <div style={{display:"flex",padding:"6px 10px 0",borderBottom:"1px solid #4a3a20",overflowX:"auto",gap:0}}>
